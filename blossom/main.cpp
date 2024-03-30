@@ -1,4 +1,4 @@
-// system
+﻿// system
 #include <cstdio>
 #include <cstdint>
 #include <Windows.h>
@@ -10,6 +10,29 @@
 
 // config
 #include "config.h"
+
+// GDI
+#include <gdiplus.h>
+
+struct GdiplusInit
+{
+	GdiplusInit()
+	{
+		Gdiplus::GdiplusStartupInput inp;
+		Gdiplus::GdiplusStartupOutput outp;
+		if (Gdiplus::Ok != GdiplusStartup(&token_, &inp, &outp))
+		{
+			//throw runtime_error("GdiplusStartup");
+			ExitProcess(1);
+		}
+	}
+	~GdiplusInit()
+	{
+		Gdiplus::GdiplusShutdown(token_);
+	}
+private:
+	ULONG_PTR token_;
+};
 
 // shaders
 #include "frag_draw.h"
@@ -31,6 +54,9 @@ GLuint gShaderPresent;
 // framebuffers
 GLuint fbAccumulator;
 
+// textures
+GLuint proseTex;
+
 // uniform bindings
 int const kUniformResolution = 0;
 int const kUniformFrame = 1;
@@ -49,6 +75,198 @@ int const kCanvasHeight = GetSystemMetrics(SM_CYSCREEN);
 #define kWindowWidth kCanvasWidth
 #define kWindowHeight kCanvasHeight
 // =====================
+
+#if _DEBUG
+int GetEncoderClsid(const WCHAR* format, CLSID* pClsid)
+{
+	UINT  num = 0;          // number of image encoders
+	UINT  size = 0;         // size of the image encoder array in bytes
+
+	Gdiplus::ImageCodecInfo* pImageCodecInfo = NULL;
+
+	Gdiplus::GetImageEncodersSize(&num, &size);
+	if (size == 0)
+		return -1;  // Failure
+
+	pImageCodecInfo = (Gdiplus::ImageCodecInfo*)(malloc(size));
+	if (pImageCodecInfo == NULL)
+		return -1;  // Failure
+
+	GetImageEncoders(num, size, pImageCodecInfo);
+
+	for (UINT j = 0; j < num; ++j)
+	{
+		if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0)
+		{
+			*pClsid = pImageCodecInfo[j].Clsid;
+			free(pImageCodecInfo);
+			return j;  // Success
+		}
+	}
+
+	free(pImageCodecInfo);
+	return -1;  // Failure
+}
+#endif
+
+
+
+uint32_t lfsr = 0xACE1u;
+uint32_t myrand()
+{
+	unsigned lsb = lfsr & 1u;  /* Get LSB (i.e., the output bit). */
+	lfsr >>= 1;                /* Shift register */
+	if (lsb)                   /* If the output bit is 1, */
+		lfsr ^= 0xB400u;       /*  apply toggle mask. */
+	return lfsr >> 4;
+}
+
+
+//A single iteration of Bob Jenkins' One-At-A-Time hashing algorithm.
+uint32_t hash(uint32_t x)
+{
+	x += (x << 10u);
+	x ^= (x >> 6u);
+	x += (x << 3u);
+	x ^= (x >> 11u);
+	x += (x << 15u);
+	return x;
+}
+
+
+GLuint createProseTexture()
+{
+	// setup gdi+
+	ULONG_PTR token_;
+	Gdiplus::GdiplusStartupInput inp;
+	Gdiplus::GdiplusStartupOutput outp;
+#if _DEBUG
+	// seems to work fine replacing &outp with NULL
+	if (Gdiplus::Ok != GdiplusStartup(&token_, &inp, &outp))
+	{
+		ExitProcess(1);
+	}
+#else
+	GdiplusStartup(&token_, &inp, &outp);
+#endif
+	// setup gdi+
+
+	GLuint backing;
+	{
+		auto const SCALE = 16;
+		auto const width = 256 * SCALE;
+		auto const height = 256 * SCALE;
+
+		//Create a bitmap
+		Gdiplus::Bitmap myBitmap(width, height, PixelFormat32bppARGB);
+		Gdiplus::Graphics g(&myBitmap);
+		g.Clear(Gdiplus::Color::White);
+		//g.Clear(Gdiplus::Color(255,128,128,128));
+		g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+
+		const auto FONT_SIZE = 9 * SCALE;
+
+		Gdiplus::FontFamily  fontFamily(L"Georgia");
+		Gdiplus::Font        boldFont(&fontFamily, FONT_SIZE, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+		Gdiplus::Font        font(&fontFamily, FONT_SIZE, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+		Gdiplus::SolidBrush  solidBrush(Gdiplus::Color(255, 0, 0, 0));
+
+		//Gdiplus::Pen         debugPen(Gdiplus::Color::Blue);
+
+		WCHAR const* title = L"Fragments of Self";
+
+		WCHAR const* poem[] = {
+			L", rev. 24",
+			0,
+			0,
+			0,
+			L"I used to call myself a graphics programmer.",
+			L"But somewhere along the way, I lost that self.",
+			//L"A hostile environment left her broken.",
+			L"She lost her passion and went into hiding.",
+			0,
+			L"Perhaps, one day, I’ll ﬁnd her again.",
+			0,
+			L"– Luna",
+			0,
+			0,
+			0,
+			L"She wrote those words,",
+			L"in hopes I’d draw for her.",
+			L"I’m not gone, just… resting.",
+			0,
+			L"I hope this is enough, for now.",
+			0,
+			L"– yx",
+		};
+
+		const auto reset_x = 2*SCALE;
+		
+		Gdiplus::PointF pos(reset_x, 2*SCALE);
+		
+		Gdiplus::StringFormat stringFormat = Gdiplus::StringFormat::GenericTypographic();
+		Gdiplus::RectF boundingBox;
+		g.DrawString(title, -1, &boldFont, pos, &stringFormat, &solidBrush);
+		g.MeasureString(title, -1, &boldFont, pos, &stringFormat, &boundingBox);
+		
+		//g.DrawRectangle(&debugPen, boundingBox);
+
+		pos.X += boundingBox.Width;
+		for (WCHAR const* line : poem)
+		{
+			g.DrawString(line, -1, &font, pos, &stringFormat, &solidBrush);
+			pos.X = reset_x;
+			pos.Y += FONT_SIZE * 1.35f;
+		}
+
+		Gdiplus::Rect lockRect = Gdiplus::Rect(Gdiplus::Point(0, 0), Gdiplus::Size(width, height));
+		Gdiplus::BitmapData bitmapData;
+		myBitmap.LockBits(
+			&lockRect,
+			Gdiplus::ImageLockModeRead | Gdiplus::ImageLockModeWrite,
+			PixelFormat32bppARGB,
+			&bitmapData
+		);
+
+		uint32_t seed = 0xdecea5ed;
+		for (int i = 0; i < width * height; ++i)
+		{
+			seed = hash(seed);
+			((char*)bitmapData.Scan0)[i * 4] = seed & 0xff;
+		}
+
+		glGenTextures(1, &backing);
+		glBindTexture(GL_TEXTURE_2D, backing);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, bitmapData.Scan0);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+#if _DEBUG
+		// Save bitmap (as a png)
+		CLSID pngClsid;
+		int result = GetEncoderClsid(L"image/png", &pngClsid);
+		if (result == -1)
+		{
+			ExitProcess(1);
+		}
+		if (Gdiplus::Ok != myBitmap.Save(L"test.png", &pngClsid, NULL))
+		{
+			ExitProcess(1);
+		}
+#endif
+	}
+
+	// cleanup gdi+
+#if _DEBUG
+	Gdiplus::GdiplusShutdown(token_);
+#endif
+	// cleanup gdi+
+
+	return backing;
+}
+
 
 
 
@@ -170,6 +388,7 @@ static inline void presentSetup(int destFb)
 static inline void accumulatorRender(int sampleCount)
 {
 	glUniform1i(kUniformFrame, sampleCount);
+	glBindTexture(GL_TEXTURE_2D, proseTex);
 	glRecti(-1, -1, 1, 1);
 
 #ifndef RENDER_EXACT_SAMPLES
@@ -237,6 +456,9 @@ int main()
 	float* cpuFramebufferFloat = new float[kCanvasWidth * kCanvasHeight * 4];
 	uint8_t* cpuFramebufferU8 = new uint8_t[kCanvasWidth * kCanvasHeight * 3];
 #endif
+
+	// render text
+	proseTex = createProseTexture();
 
 	// make shaders
 	gShaderDraw = makeShader(draw_frag);

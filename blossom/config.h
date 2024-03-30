@@ -4,7 +4,7 @@
 #define DESPERATE 0
 
 // releasing at Revision? here's a handy toggle for some compo-safe config presets
-#define REVISION_RULESET 0
+#define REVISION_RULESET 1
 
 
 #if _DEBUG
@@ -24,20 +24,20 @@
 	// party release config, based on Revision ruleset
 	#if REVISION_RULESET
 		#define WINDOW_FULLSCREEN 1
-		#define WINDOW_AUTO_SIZE 0
-		#define CANVAS_WIDTH  1920
-		#define CANVAS_HEIGHT 1080
+		#define WINDOW_AUTO_SIZE 1
+		//#define CANVAS_WIDTH  1920
+		//#define CANVAS_HEIGHT 1080
 
 		#define RENDER_MAX_TIME_MS 30000 // Revision Rules: don't exceed 30 seconds
 
-		#define RENDER_MAX_SAMPLES 256 // customizable, optional
+		#define RENDER_MAX_SAMPLES 1024 // customizable, optional
 
 		#define RENDER_PROGRESSIVE 0 // Revision Rules: no progressive rendering.
 	#else
 		#define WINDOW_FULLSCREEN 1
 		#define WINDOW_AUTO_SIZE 1
 
-		#define RENDER_EXACT_SAMPLES 256 // without the constraints of party rules, we can set an exact quality bar, if we want.
+		#define RENDER_EXACT_SAMPLES 1024 // without the constraints of party rules, we can set an exact quality bar, if we want.
 
 		#define RENDER_PROGRESSIVE 0
 	#endif
@@ -45,8 +45,8 @@
 
 #if CAPTURE
 	#define WINDOW_AUTO_SIZE 0
-	#define CANVAS_WIDTH 3840
-	#define CANVAS_HEIGHT 2160
+	#define CANVAS_WIDTH 1620
+	#define CANVAS_HEIGHT 1080
 
 	#define RENDER_EXACT_SAMPLES 1024
 
