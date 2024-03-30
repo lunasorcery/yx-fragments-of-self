@@ -74,7 +74,7 @@ float sdFiber(vec2 p)
 
 float sdPartialRibbon(vec3 p)
 {
-    //p.y += texture(iChannel1,p.xz*.01).r*.1-.05;
+    p.y += texture(iChannel1,p.xz *0.015625 *.02).r*.05-.025;
     
     p.z = abs(p.z)-4.;
     p.z = abs(p.z)-2.;
@@ -162,10 +162,13 @@ float scene(vec3 p)
     light = 1e9;
 
     p=op;
+	p.x=-p.x;
     p.y-=5.;
     p.z-=1.5;
-    p.y-=(sin(max(p.x*.05,-pi*.5))*.5+.5)*.5;
+    p.y+=(sin(min(p.x*.07+3.,pi*.5))*.5-.5)*2.;
 	p.y+=cos(p.z*.5)*.1;
+	p.y-=.4;
+	p.yz *= rotate(max(-(p.x-30.)*.005,.0)-.1);
     float ribbon = sdRibbon(p*2.)*.5;
 
     float best = ground;
@@ -407,7 +410,7 @@ vec3 trace2(vec3 cam, vec3 dir)
                 else
                 {
             		dir=getSampleBiased(n,1.);
-                    accum *= vec3(120,2,0)/255.;
+                    accum *= vec3(60,1,3)/255.;
                 }
             }
         }
@@ -452,6 +455,7 @@ void main()
     // camera params
     //const vec3 camPos = vec3(200,170,60+10);
     const vec3 camPos = vec3(200,150,80-1);
+    //const vec3 camPos = vec3(1,400,40-1);
     const vec3 lookAt = vec3(0,2.,30+10-1);
     const float focusDistance=distance(camPos,lookAt)*.99;
     const vec2 apertureRadius=vec2(1)*1.5;
